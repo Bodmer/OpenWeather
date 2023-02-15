@@ -11,14 +11,14 @@
 
 // This is a Processing sketch, see https://processing.org/ to download the IDE
 
-// The sketch is a client that requests TFT screenshots from an Arduino board.
-// The Arduino must call a screenshot server function to respond with pixels.
+// The sketch is a client that requests TFT screen-shots from an Arduino board.
+// The Arduino must call a screen-shot server function to respond with pixels.
 
 // It has been created to work with the TFT_eSPI library here:
 // https://github.com/Bodmer/TFT_eSPI
 
 // The sketch must only be run when the designated serial port is available and enumerated
-// otherwise the screenshot window may freeze and that process will need to be terminated
+// otherwise the screen-shot window may freeze and that process will need to be terminated
 // This is a limitation of the Processing environment and not the sketch.
 // If anyone knows how to determine if a serial port is available at start up the PM me
 // on (Bodmer) the Arduino forum.

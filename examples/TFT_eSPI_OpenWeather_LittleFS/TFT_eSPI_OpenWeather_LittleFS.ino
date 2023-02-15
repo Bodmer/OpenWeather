@@ -1,22 +1,23 @@
 //  Example from OpenWeather library: https://github.com/Bodmer/OpenWeather
 //  Adapted by Bodmer to use the TFT_eSPI library:  https://github.com/Bodmer/TFT_eSPI
 
-//  This sketch is compatible with the ESP8266 and ESP32
+//  This sketch is compatible with the RP2040 Nano Connect, ESP32 and ESP32 S2, it may
+//  also work on ESP8266 but this has not been tested.
 
 //                           >>>  IMPORTANT  <<<
 //         Modify setup in All_Settings.h tab to configure your location etc
 
 //                >>>  EVEN MORE IMPORTANT TO PREVENT CRASHES <<<
-//>>>>>>  For ESP8266 set SPIFFS to at least 2Mbytes before uploading files  <<<<<<
+//>>>>>>  For ESP8266 set LittleFS to at least 2Mbytes before uploading files  <<<<<<
 
 //  ESP8266/ESP32 pin connections to the TFT are defined in the TFT_eSPI library.
 
 //  Original by Daniel Eichhorn, see license at end of file.
 
-//#define SERIAL_MESSAGES // For serial output weather reports
-//#define SCREEN_SERVER   // For dumping screentshots from TFT
+#define SERIAL_MESSAGES // For serial output weather reports
+//#define SCREEN_SERVER   // For dumping screen shots from TFT
 //#define RANDOM_LOCATION // Test only, selects random weather location every refresh
-//#define FORMAT_SPIFFS   // Wipe SPIFFS and all files!
+//#define FORMAT_LittleFS   // Wipe LittleFS and all files!
 
 // This sketch uses font files created from the Noto family of fonts as bitmaps
 // generated from these fonts may be freely distributed:
@@ -24,14 +25,17 @@
 
 // A processing sketch to create new fonts can be found in the Tools folder of TFT_eSPI
 // https://github.com/Bodmer/TFT_eSPI/tree/master/Tools/Create_Smooth_Font/Create_font
-// New fonts can be generated to include language specifc characters. The Noto family
+// New fonts can be generated to include language specific characters. The Noto family
 // of fonts has an extensive character set coverage.
 
 // Json streaming parser (do not use IDE library manager version) to use is here:
 // https://github.com/Bodmer/JSON_Decoder
 
-#define AA_FONT_SMALL "fonts/NotoSansBold15" // 15 point sans serif bold
-#define AA_FONT_LARGE "fonts/NotoSansBold36" // 36 point sans serif bold
+#include <FS.h>
+#include <LittleFS.h>
+
+#define AA_FONT_SMALL "fonts/NSBold15" // 15 point Noto sans serif bold
+#define AA_FONT_LARGE "fonts/NSBold36" // 36 point Noto sans serif bold
 /***************************************************************************************
 **                          Load the libraries and settings
 ***************************************************************************************/
@@ -42,16 +46,22 @@
 
 // Additional functions
 #include "GfxUi.h"          // Attached to this sketch
-#include "SPIFFS_Support.h" // Attached to this sketch
 
+// Choose library to load
 #ifdef ESP8266
   #include <ESP8266WiFi.h>
-#else
+#elif defined(ARDUINO_ARCH_MBED) || defined(ARDUINO_ARCH_RP2040)
+  #if defined(ARDUINO_RASPBERRY_PI_PICO_W)
+    #include <WiFi.h>
+  #else
+    #include <WiFiNINA.h>
+  #endif
+#else // ESP32
   #include <WiFi.h>
 #endif
 
 
-// check settings.h for adapting to your needs
+// check All_Settings.h for adapting to your needs
 #include "All_Settings.h"
 
 #include <JSON_Decoder.h> // https://github.com/Bodmer/JSON_Decoder
@@ -66,11 +76,9 @@
 
 TFT_eSPI tft = TFT_eSPI();             // Invoke custom library
 
-OW_Weather ow;      // Weather forcast library instance
+OW_Weather ow;      // Weather forecast library instance
 
-OW_current *current; // Pointers to structs that temporarily holds weather data
-OW_hourly  *hourly;  // Not used
-OW_daily   *daily;
+OW_forecast  *forecast;
 
 boolean booted = true;
 
@@ -98,6 +106,18 @@ int leftOffset(String text, String sub);
 int rightOffset(String text, String sub);
 int splitIndex(String text);
 
+bool tft_output(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t* bitmap)
+{
+   // Stop further decoding as image is running off bottom of screen
+  if ( y >= tft.height() ) return 0;
+
+  // This function will clip the image block rendering automatically at the TFT boundaries
+  tft.pushImage(x, y, w, h, bitmap);
+
+  // Return 1 to decode next block
+  return 1;
+}
+
 /***************************************************************************************
 **                          Setup
 ***************************************************************************************/
@@ -105,27 +125,37 @@ void setup() {
   Serial.begin(250000);
 
   tft.begin();
+  tft.setRotation(0); // For 320x480 screen
   tft.fillScreen(TFT_BLACK);
 
-  SPIFFS.begin();
-  listFiles();
+  if (!LittleFS.begin()) {
+    Serial.println("Flash FS initialisation failed!");
+    while (1) yield(); // Stay here twiddling thumbs waiting
+  }
+  Serial.println("\nFlash FS available!");
 
-  // Enable if you want to erase SPIFFS, this takes some time!
+  // Enable if you want to erase LittleFS, this takes some time!
   // then disable and reload sketch to avoid reformatting on every boot!
-  #ifdef FORMAT_SPIFFS
+  #ifdef FORMAT_LittleFS
     tft.setTextDatum(BC_DATUM); // Bottom Centre datum
-    tft.drawString("Formatting SPIFFS, so wait!", 120, 195); SPIFFS.format();
+    tft.drawString("Formatting LittleFS, so wait!", 120, 195); LittleFS.format();
   #endif
 
+  TJpgDec.setJpgScale(1);
+  TJpgDec.setCallback(tft_output);
+  TJpgDec.setSwapBytes(true); // May need to swap the jpg colour bytes (endianess)
+
   // Draw splash screen
-  if (SPIFFS.exists("/splash/OpenWeather.jpg")   == true) ui.drawJpeg("/splash/OpenWeather.jpg",   0, 40);
+  if (LittleFS.exists("/splash/OpenWeather.jpg")   == true) {
+    TJpgDec.drawFsJpg(0, 40, "/splash/OpenWeather.jpg", LittleFS);
+  }
 
   delay(2000);
 
   // Clear bottom section of screen
   tft.fillRect(0, 206, 240, 320 - 206, TFT_BLACK);
 
-  tft.loadFont(AA_FONT_SMALL);
+  tft.loadFont(AA_FONT_SMALL, LittleFS);
   tft.setTextDatum(BC_DATUM); // Bottom Centre datum
   tft.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
 
@@ -141,13 +171,17 @@ void setup() {
   tft.drawString("Connecting to WiFi", 120, 240);
   tft.setTextPadding(240); // Pad next drawString() text to full width to over-write old text
 
-  //Manual Wifi connection
-  //WiFi.mode(WIFI_STA); // Needed?
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  // Call once for ESP32 and ESP8266
+  #if !defined(ARDUINO_ARCH_MBED)
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  #endif
 
   while (WiFi.status() != WL_CONNECTED) {
-    delay(1000);
     Serial.print(".");
+    #if defined(ARDUINO_ARCH_MBED) || defined(ARDUINO_ARCH_RP2040)
+      if (WiFi.status() != WL_CONNECTED) WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    #endif
+    delay(500);
   }
   Serial.println();
 
@@ -155,15 +189,12 @@ void setup() {
   tft.setTextPadding(240); // Pad next drawString() text to full width to over-write old text
   tft.drawString(" ", 120, 220);  // Clear line above using set padding width
   tft.drawString("Fetching weather data...", 120, 240);
-  //delay(500);
 
   // Fetch the time
   udp.begin(localPort);
   syncTime();
 
   tft.unloadFont();
-
-  ow.partialDataSet(true); // Collect a subset of the data available
 }
 
 /***************************************************************************************
@@ -199,12 +230,10 @@ void loop() {
 /***************************************************************************************
 **                          Fetch the weather data  and update screen
 ***************************************************************************************/
-// Update the internet based information and update screen
+// Update the Internet based information and update screen
 void updateData() {
   // booted = true;  // Test only
   // booted = false; // Test only
-
-  tft.loadFont(AA_FONT_SMALL);
 
   if (booted) drawProgress(20, "Updating time...");
   else fillSegment(22, 22, 0, (int) (20 * 3.6), 16, TFT_NAVY);
@@ -212,10 +241,8 @@ void updateData() {
   if (booted) drawProgress(50, "Updating conditions...");
   else fillSegment(22, 22, 0, (int) (50 * 3.6), 16, TFT_NAVY);
 
-  // Create the structures that hold the retrieved weather
-  current = new OW_current;
-  daily =   new OW_daily;
-  hourly =  new OW_hourly;
+  // Create the structure that holds the retrieved weather
+  forecast = new OW_forecast;
 
 #ifdef RANDOM_LOCATION // Randomly choose a place on Earth to test icons etc
   String latitude = "";
@@ -226,7 +253,12 @@ void updateData() {
   Serial.print(", Lon = "); Serial.println(longitude);
 #endif
 
-  bool parsed = ow.getForecast(current, hourly, daily, api_key, latitude, longitude, units, language);
+  bool parsed = ow.getForecast(forecast, api_key, latitude, longitude, units, language);
+
+  if (parsed) Serial.println("Data points received");
+  else Serial.println("Failed to get data points");
+
+  //Serial.print("Free heap = "); Serial.println(ESP.getFreeHeap(), DEC);
 
   printWeather(); // For debug, turn on output with #define SERIAL_MESSAGES
 
@@ -242,19 +274,17 @@ void updateData() {
     fillSegment(22, 22, 0, 360, 22, TFT_BLACK);
   }
 
-  //tft.fillScreen(TFT_CYAN); // For text padding and update graphics zone checking only
-
   if (parsed)
   {
+    tft.loadFont(AA_FONT_SMALL, LittleFS);
     drawCurrentWeather();
     drawForecast();
     drawAstronomy();
-
     tft.unloadFont();
 
-    // Update the temperature here so we dont need keep
+    // Update the temperature here so we don't need to keep
     // loading and unloading font which takes time
-    tft.loadFont(AA_FONT_LARGE);
+    tft.loadFont(AA_FONT_LARGE, LittleFS);
     tft.setTextDatum(TR_DATUM);
     tft.setTextColor(TFT_YELLOW, TFT_BLACK);
 
@@ -262,8 +292,9 @@ void updateData() {
     tft.setTextPadding(tft.textWidth(" -88")); // Max width of values
 
     String weatherText = "";
-    weatherText = (int16_t) current->temp;  // Make it integer temperature
+    weatherText = String(forecast->temp[0], 0);  // Make it integer temperature
     tft.drawString(weatherText, 215, 95); //  + "°" symbol is big... use o in small font
+    tft.unloadFont();
   }
   else
   {
@@ -271,17 +302,14 @@ void updateData() {
   }
 
   // Delete to free up space
-  delete current;
-  delete hourly;
-  delete daily;
-
-  tft.unloadFont();
+  delete forecast;
 }
 
 /***************************************************************************************
 **                          Update progress bar
 ***************************************************************************************/
 void drawProgress(uint8_t percentage, String text) {
+  tft.loadFont(AA_FONT_SMALL, LittleFS);
   tft.setTextDatum(BC_DATUM);
   tft.setTextColor(TFT_ORANGE, TFT_BLACK);
   tft.setTextPadding(240);
@@ -290,13 +318,14 @@ void drawProgress(uint8_t percentage, String text) {
   ui.drawProgressBar(10, 269, 240 - 20, 15, percentage, TFT_WHITE, TFT_BLUE);
 
   tft.setTextPadding(0);
+  tft.unloadFont();
 }
 
 /***************************************************************************************
 **                          Draw the clock digits
 ***************************************************************************************/
 void drawTime() {
-  tft.loadFont(AA_FONT_LARGE);
+  tft.loadFont(AA_FONT_LARGE, LittleFS);
 
   // Convert UTC to local time, returns zone code in tz1_Code, e.g "GMT"
   time_t local_time = TIMEZONE.toLocal(now(), &tz1_Code);
@@ -325,7 +354,9 @@ void drawTime() {
 **                          Draw the current weather
 ***************************************************************************************/
 void drawCurrentWeather() {
-  String date = "Updated: " + strDate(current->dt);
+  time_t local_time = TIMEZONE.toLocal(now(), &tz1_Code);
+  String date = "Updated: " + strDate(local_time);
+  String weatherText = "None";
 
   tft.setTextDatum(BC_DATUM);
   tft.setTextColor(TFT_ORANGE, TFT_BLACK);
@@ -334,17 +365,22 @@ void drawCurrentWeather() {
 
   String weatherIcon = "";
 
-  String currentSummary = current->main;
+  String currentSummary = forecast->main[0];
   currentSummary.toLowerCase();
 
-  weatherIcon = getMeteoconIcon(current->id, true);
+  weatherIcon = getMeteoconIcon(forecast->id[0], true);
 
   //uint32_t dt = millis();
   ui.drawBmp("/icon/" + weatherIcon + ".bmp", 0, 53);
+
+
   //Serial.print("Icon draw time = "); Serial.println(millis()-dt);
 
   // Weather Text
-  String weatherText = current->main;
+  if (language == "en")
+    weatherText = forecast->main[0];
+  else
+    weatherText = forecast->description[0];
 
   tft.setTextDatum(BR_DATUM);
   tft.setTextColor(TFT_ORANGE, TFT_BLACK);
@@ -367,9 +403,8 @@ void drawCurrentWeather() {
   //Temperature large digits added in updateData() to save swapping font here
  
   tft.setTextColor(TFT_ORANGE, TFT_BLACK);
-  weatherText = (uint16_t)current->wind_speed;
+  weatherText = String(forecast->wind_speed[0], 0);
 
-  // TODO: check if this works correctly
   if (units == "metric") weatherText += " m/s";
   else weatherText += " mph";
 
@@ -379,12 +414,12 @@ void drawCurrentWeather() {
 
   if (units == "imperial")
   {
-    weatherText = current->pressure;
+    weatherText = forecast->pressure[0];
     weatherText += " in";
   }
   else
   {
-    weatherText = (uint16_t)current->pressure;
+    weatherText = String(forecast->pressure[0], 0);
     weatherText += " hPa";
   }
 
@@ -392,7 +427,7 @@ void drawCurrentWeather() {
   tft.setTextPadding(tft.textWidth(" 8888hPa")); // Max string length?
   tft.drawString(weatherText, 230, 136);
 
-  int windAngle = (current->wind_deg + 22.5) / 45;
+  int windAngle = (forecast->wind_deg[0] + 22.5) / 45;
   if (windAngle > 7) windAngle = 0;
   String wind[] = {"N", "NE", "E", "SE", "S", "SW", "W", "NW" };
   ui.drawBmp("/wind/" + wind[windAngle] + ".bmp", 101, 86);
@@ -408,12 +443,15 @@ void drawCurrentWeather() {
 ***************************************************************************************/
 // draws the three forecast columns
 void drawForecast() {
-  int8_t dayIndex = 1;
-  //while ((daily->dt[dayIndex] < (current->dt - 12*60*60UL)) && (dayIndex < (MAX_DAYS - 4))) dayIndex++;
-  drawForecastDetail(  8, 171, dayIndex++);
-  drawForecastDetail( 66, 171, dayIndex++); // was 95
-  drawForecastDetail(124, 171, dayIndex++); // was 180
-  drawForecastDetail(182, 171, dayIndex  ); // was 180
+  int8_t dayIndex = getNextDayIndex();
+  
+  drawForecastDetail(  8, 171, dayIndex);
+  dayIndex += 8;
+  drawForecastDetail( 66, 171, dayIndex); // was 95
+  dayIndex += 8;
+  drawForecastDetail(124, 171, dayIndex); // was 180
+  dayIndex += 8;
+  drawForecastDetail(182, 171, dayIndex); // was 180
   drawSeparator(171 + 69);
 }
 
@@ -423,9 +461,9 @@ void drawForecast() {
 // helper for the forecast columns
 void drawForecastDetail(uint16_t x, uint16_t y, uint8_t dayIndex) {
 
-  if (dayIndex >= MAX_DAYS) return;
+  if (dayIndex >= MAX_DAYS * 8) return;
 
-  String day  = shortDOW[weekday(TIMEZONE.toLocal(daily->dt[dayIndex], &tz1_Code))];
+  String day  = shortDOW[weekday(TIMEZONE.toLocal(forecast->dt[dayIndex + 4], &tz1_Code))];
   day.toUpperCase();
 
   tft.setTextDatum(BC_DATUM);
@@ -436,11 +474,18 @@ void drawForecastDetail(uint16_t x, uint16_t y, uint8_t dayIndex) {
 
   tft.setTextColor(TFT_WHITE, TFT_BLACK);
   tft.setTextPadding(tft.textWidth("-88   -88"));
-  String highTemp = String(daily->temp_max[dayIndex], 0);
-  String lowTemp  = String(daily->temp_min[dayIndex], 0);
+
+  // Find the temperature min and max during the day
+  float tmax = -9999;
+  float tmin =  9999;
+  for (int i = 0; i < 8; i++) if (forecast->temp_max[dayIndex + i] > tmax) tmax = forecast->temp_max[dayIndex + i];
+  for (int i = 0; i < 8; i++) if (forecast->temp_min[dayIndex + i] < tmin) tmin = forecast->temp_min[dayIndex + i];
+
+  String highTemp = String(tmax, 0);
+  String lowTemp  = String(tmin, 0);
   tft.drawString(highTemp + " " + lowTemp, x + 25, y + 17);
 
-  String weatherIcon = getMeteoconIcon(daily->id[dayIndex], false);
+  String weatherIcon = getMeteoconIcon(forecast->id[dayIndex + 4], false);
 
   ui.drawBmp("/icon50/" + weatherIcon + ".bmp", x, y + 18);
 
@@ -456,7 +501,7 @@ void drawAstronomy() {
   tft.setTextColor(TFT_WHITE, TFT_BLACK);
   tft.setTextPadding(tft.textWidth(" Last qtr "));
 
-  time_t local_time = TIMEZONE.toLocal(current->dt, &tz1_Code);
+  time_t local_time = TIMEZONE.toLocal(forecast->dt[0], &tz1_Code);
   uint16_t y = year(local_time);
   uint8_t  m = month(local_time);
   uint8_t  d = day(local_time);
@@ -476,25 +521,20 @@ void drawAstronomy() {
   tft.setTextColor(TFT_WHITE, TFT_BLACK);
   tft.setTextPadding(tft.textWidth(" 88:88 "));
 
-  String rising = strTime(current->sunrise) + " ";
+  String rising = strTime(forecast->sunrise) + " ";
   int dt = rightOffset(rising, ":"); // Draw relative to colon to them aligned
   tft.drawString(rising, 40 + dt, 290);
 
-  String setting = strTime(current->sunset) + " ";
+  String setting = strTime(forecast->sunset) + " ";
   dt = rightOffset(setting, ":");
   tft.drawString(setting, 40 + dt, 305);
 
-  /* OpenWeather does not provide Moon phase, rise and setting times
-     There are other free API providers to try, maybe:
-     http://api.usno.navy.mil/rstt/oneday?date=1/5/2005&loc=Los%20Angeles,%20CA
-  */
-
   tft.setTextDatum(BC_DATUM);
   tft.setTextColor(TFT_ORANGE, TFT_BLACK);
-  tft.drawString(cloudStr, 195, 260);
+  tft.drawString(cloudStr, 195, 260);     // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< ?
 
   String cloudCover = "";
-  cloudCover += current->clouds;
+  cloudCover += forecast->clouds_all[0];
   cloudCover += "%";
 
   tft.setTextDatum(BR_DATUM);
@@ -504,10 +544,10 @@ void drawAstronomy() {
 
   tft.setTextDatum(BC_DATUM);
   tft.setTextColor(TFT_ORANGE, TFT_BLACK);
-  tft.drawString(humidityStr, 195, 300 - 2);
+  tft.drawString(humidityStr, 195, 300 - 2);     // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< ?
 
   String humidity = "";
-  humidity += current->humidity;
+  humidity += forecast->humidity[0];
   humidity += "%";
 
   tft.setTextDatum(BR_DATUM);
@@ -523,7 +563,7 @@ void drawAstronomy() {
 ***************************************************************************************/
 const char* getMeteoconIcon(uint16_t id, bool today)
 {
-  if ( today && id/100 == 8 && (current->dt < current->sunrise || current->dt > current->sunset)) id += 1000; 
+  if ( today && id/100 == 8 && (forecast->dt[0] < forecast->sunrise || forecast->dt[0] > forecast->sunset)) id += 1000; 
 
   if (id/100 == 2) return "thunderstorm";
   if (id/100 == 3) return "drizzle";
@@ -562,7 +602,7 @@ void drawSeparator(uint16_t y) {
 // determine the "space" split point in a long string
 int splitIndex(String text)
 {
-  int index = 0;
+  uint16_t index = 0;
   while ( (text.indexOf(' ', index) >= 0) && ( index <= text.length() / 2 ) ) {
     index = text.indexOf(' ', index) + 1;
   }
@@ -622,10 +662,24 @@ void fillSegment(int x, int y, int start_angle, int sub_angle, int r, unsigned i
 
     tft.fillTriangle(x1, y1, x2, y2, x, y, colour);
 
-    // Copy segment end to sgement start for next segment
+    // Copy segment end to segment start for next segment
     x1 = x2;
     y1 = y2;
   }
+}
+
+/***************************************************************************************
+**                          Get 3 hourly index at start of next day
+***************************************************************************************/
+int getNextDayIndex(void)
+{
+  int index = 0;
+  String today = forecast->dt_txt[0].substring(8,10);
+  for (index = 0; index < 9; index++)
+  {
+    if (forecast->dt_txt[index].substring(8,10) != today) break;
+  }
+  return index;
 }
 
 /***************************************************************************************
@@ -636,37 +690,55 @@ void printWeather(void)
 #ifdef SERIAL_MESSAGES
   Serial.println("Weather from OpenWeather\n");
 
-  Serial.println("############### Current weather ###############\n");
-  Serial.print("dt (time)          : "); Serial.println(strDate(current->dt));
-  Serial.print("sunrise            : "); Serial.println(strDate(current->sunrise));
-  Serial.print("sunset             : "); Serial.println(strDate(current->sunset));
-//Serial.print("Moon phase         : "); Serial.println(current->moonPhase);
-  Serial.print("main               : "); Serial.println(current->main);
-  Serial.print("temp               : "); Serial.println(current->temp);
-  Serial.print("humidity           : "); Serial.println(current->humidity);
-  Serial.print("pressure           : "); Serial.println(current->pressure);
-  Serial.print("wind_speed         : "); Serial.println(current->wind_speed);
-  Serial.print("wind_deg           : "); Serial.println(current->wind_deg);
-  Serial.print("clouds             : "); Serial.println(current->clouds);
-  Serial.print("id                 : "); Serial.println(current->id);
+  Serial.print("city_name           : "); Serial.println(forecast->city_name);
+  Serial.print("sunrise             : "); Serial.println(strTime(forecast->sunrise));
+  Serial.print("sunset              : "); Serial.println(strTime(forecast->sunset));
+  Serial.print("Latitude            : "); Serial.println(ow.lat);
+  Serial.print("Longitude           : "); Serial.println(ow.lon);
+  // We can use the timezone to set the offset eventually...
+  Serial.print("Timezone            : "); Serial.println(forecast->timezone);
   Serial.println();
 
-  Serial.println("###############  Daily weather  ###############\n");
-  Serial.println();
-
-  for (int i = 0; i < 5; i++)
+  if (forecast)
   {
-    Serial.print("dt (time)          : "); Serial.println(strDate(daily->dt[i]));
-    Serial.print("id                 : "); Serial.println(daily->id[i]);
-    Serial.print("temp_max           : "); Serial.println(daily->temp_max[i]);
-    Serial.print("temp_min           : "); Serial.println(daily->temp_min[i]);
-    Serial.println();
-  }
+    Serial.println("###############  Forecast weather  ###############\n");
+    for (int i = 0; i < (MAX_DAYS * 8); i++)
+    {
+      Serial.print("3 hourly forecast   "); if (i < 10) Serial.print(" "); Serial.print(i);
+      Serial.println();
+      Serial.print("dt (time)        : "); Serial.println(strTime(forecast->dt[i]));
 
+      Serial.print("temp             : "); Serial.println(forecast->temp[i]);
+      Serial.print("temp.min         : "); Serial.println(forecast->temp_min[i]);
+      Serial.print("temp.max         : "); Serial.println(forecast->temp_max[i]);
+
+      Serial.print("pressure         : "); Serial.println(forecast->pressure[i]);
+      Serial.print("sea_level        : "); Serial.println(forecast->sea_level[i]);
+      Serial.print("grnd_level       : "); Serial.println(forecast->grnd_level[i]);
+      Serial.print("humidity         : "); Serial.println(forecast->humidity[i]);
+
+      Serial.print("clouds           : "); Serial.println(forecast->clouds_all[i]);
+      Serial.print("wind_speed       : "); Serial.println(forecast->wind_speed[i]);
+      Serial.print("wind_deg         : "); Serial.println(forecast->wind_deg[i]);
+      Serial.print("wind_gust        : "); Serial.println(forecast->wind_gust[i]);
+
+      Serial.print("visibility       : "); Serial.println(forecast->visibility[i]);
+      Serial.print("pop              : "); Serial.println(forecast->pop[i]);
+      Serial.println();
+
+      Serial.print("dt_txt           : "); Serial.println(forecast->dt_txt[i]);
+      Serial.print("id               : "); Serial.println(forecast->id[i]);
+      Serial.print("main             : "); Serial.println(forecast->main[i]);
+      Serial.print("description      : "); Serial.println(forecast->description[i]);
+      Serial.print("icon             : "); Serial.println(forecast->icon[i]);
+
+      Serial.println();
+    }
+  }
 #endif
 }
 /***************************************************************************************
-**             Convert unix time to a "local time" time string "12:34"
+**             Convert Unix time to a "local time" time string "12:34"
 ***************************************************************************************/
 String strTime(time_t unixTime)
 {
@@ -684,7 +756,7 @@ String strTime(time_t unixTime)
 }
 
 /***************************************************************************************
-**  Convert unix time to a local date + time string "Oct 16 17:18", ends with newline
+**  Convert Unix time to a local date + time string "Oct 16 17:18", ends with newline
 ***************************************************************************************/
 String strDate(time_t unixTime)
 {
@@ -737,7 +809,7 @@ String strDate(time_t unixTime)
 //  Created and added new 100x100 and 50x50 pixel weather icons, these are in the
 //  sketch data folder, press Ctrl+K to view
 //  Add moon icons, eliminate all downloads of icons (may lose server!)
-//  Addapted to use anti-aliased fonts, tweaked coords
+//  Adapted to use anti-aliased fonts, tweaked coords
 //  Added forecast for 4th day
 //  Added cloud cover and humidity in lieu of Moon rise/set
 //  Adapted to be compatible with ESP32

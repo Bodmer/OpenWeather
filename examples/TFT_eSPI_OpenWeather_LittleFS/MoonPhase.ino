@@ -1,5 +1,5 @@
-/* Moon phase calculation */
-// Adapted from code here:
+/* Moon phase calculation for OpenWeather library*/
+// Adapted by Bodmer from code here:
 // http://www.voidware.com/moon_phase.htm
 
 #include <stdio.h>
@@ -11,7 +11,7 @@
 
 double Julian(int year, int month, double day)
 {
-  int a, b, c, e;
+  int a, b = 0, c, e;
   if (month < 3) {
     year--;
     month += 12;
@@ -29,7 +29,6 @@ double Julian(int year, int month, double day)
 double sun_position(double j)
 {
   double n, x, e, l, dl, v;
-  double m2;
   int i;
 
   n = 360 / 365.2422 * j;
@@ -52,8 +51,7 @@ double sun_position(double j)
 
 double moon_position(double j, double ls)
 {
-  double ms, l, mm, n, ev, sms, z, x, lm, bm, ae, ec;
-  double d;
+  double ms, l, mm, n, ev, sms, ae, ec;
   int i;
 
   /* ls = sun_position(j) */
@@ -88,8 +86,8 @@ uint8_t moon_phase(int year, int month, int day, double hour, int* ip)
   double t = lm - ls;
   if (t < 0) t += 360;
 
-  *ip = (int)((t + 22.5)/45) & 0x7; // Moon state 0-7 for moonPhase[] index
-  return ((int)(t + 7.5)/15) % 24;  // Moon state 0-23 for icon bitmap
+  *ip = (int)((t + 22.5)/45) & 0x7;        // Moon state 0-7 for moonPhase[] index
+  return ((int)((t + 7.5)/15) + 23) % 24;  // Moon state 0-23 for icon bitmap
 
   //return 100.0 * ((1.0 - cos((lm - ls) * RAD)) / 2) + 0.5; // percent illuminated
 }

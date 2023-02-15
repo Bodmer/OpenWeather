@@ -3,20 +3,14 @@
 //  The weather icons and fonts are in the sketch data folder, press Ctrl+K
 //  to view.
 
+// The ESP32 board support package 2.0.0 or later must be loaded in the
+// Arduino boards manager to provide LittleFS support.
 
 //            >>>       IMPORTANT TO PREVENT CRASHES      <<<
-//>>>>>>  Set SPIFFS to at least 1.5Mbytes before uploading files  <<<<<<
+//>>>>>>  Set LittleFS to at least 1.5Mbytes before uploading files  <<<<<<
 
-
-//                >>>           DON'T FORGET THIS             <<<
-//  Upload the fonts and icons to SPIFFS using the "Tools"  "ESP32 Sketch Data Upload"
-//  or "ESP8266 Sketch Data Upload" menu option in the IDE.
-//  To add this option follow instructions here for the ESP8266:
-//  https://github.com/esp8266/arduino-esp8266fs-plugin
-//  To add this option follow instructions here for the ESP32:
-//  https://github.com/me-no-dev/arduino-esp32fs-plugin
-
-//  Close the IDE and open again to see the new menu option.
+//            >>>           DON'T FORGET THIS             <<<
+//  Upload the fonts and icons to LittleFS using the "Tools" menu option.
 
 // You can change the number of hours and days for the forecast in the
 // "User_Setup.h" file inside the OpenWeather library folder.
@@ -34,7 +28,7 @@
 #define TIMEZONE UK // See NTP_Time.h tab for other "Zone references", UK, usMT etc
 
 // Update every 15 minutes, up to 1000 request per day are free (viz average of ~40 per hour)
-const int UPDATE_INTERVAL_SECS = 15 * 60UL; // 15 minutes
+const int UPDATE_INTERVAL_SECS = 15UL * 60UL; // 15 minutes
 
 // Pins for the TFT interface are defined in the User_Config.h file inside the TFT_eSPI library
 

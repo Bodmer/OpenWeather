@@ -121,10 +121,10 @@ boolean serialScreenServer(String filename)
   uint8_t color[3 * NPIXELS]; // RGB and 565 format color buffer for N pixels
 
   // Send all the pixels on the whole screen
-  for ( uint32_t y = 0; y < tft.height(); y++)
+  for ( int32_t y = 0; y < tft.height(); y++)
   {
     // Increment x by NPIXELS as we send NPIXELS for every byte received
-    for ( uint32_t x = 0; x < tft.width(); x += NPIXELS)
+    for ( int32_t x = 0; x < tft.width(); x += NPIXELS)
     {
       delay(0); // Equivalent to yield() for ESP8266;
 

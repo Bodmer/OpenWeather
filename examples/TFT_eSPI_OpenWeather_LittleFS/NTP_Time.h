@@ -4,21 +4,17 @@
 
 // Time library:
 // https://github.com/PaulStoffregen/Time
-
 #include <Time.h>
 
 // Time zone correction library:
 // https://github.com/JChristensen/Timezone
-
-// TODO: Use time zone correction in JSON reply from Dark Sky
-
 #include <Timezone.h>
 
 // Libraries built into IDE
 #ifdef ESP8266
-  #include <ESP8266WiFi.h>
+#include <ESP8266WiFi.h>
 #else
-  #include <WiFi.h>
+#include <WiFi.h>
 #endif
 
 #include <WiFiUdp.h>
@@ -140,6 +136,13 @@ void syncTime(void)
     // Get a random server from the pool
     WiFi.hostByName(ntpServerName, timeServerIP);
     nextSendTime = millis() + 5000;
+
+    // Flush old late packets
+    while  (udp.parsePacket() > 0)  {                // Is a packet there?
+      Serial.println("Reading delayed NTP packet."); // Yes
+      udp.read(packetBuffer, NTP_PACKET_SIZE);       // read the packet into the buffer
+    }
+
     sendNTPpacket(timeServerIP); // send an NTP packet to a time server
     decodeNTP();
   }
@@ -191,7 +194,7 @@ void decodeNTP(void)
       // We've received a packet, read the data from it
       udp.read(packetBuffer, NTP_PACKET_SIZE); // read the packet into the buffer
 
-      Serial.print("\nNTP response time was : ");
+      Serial.print("\nNTP response time was  : ");
       Serial.print(500 - (waitTime - newRecvTime));
       Serial.println(" ms");
 
@@ -218,7 +221,7 @@ void decodeNTP(void)
       timeValid = true;
 
       // Print the hour, minute and second:
-      Serial.print("Received NTP UTC time : ");
+      Serial.print("Received NTP UTC time  : ");
 
       uint8_t hh = hour(utc);
       Serial.print(hh); // print the hour (86400 equals secs per day)
