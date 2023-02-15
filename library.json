@@ -1,0 +1,21 @@
+{
+  "name": "OpenWeather",
+  "version": "0.3.0",
+  "keywords": "weather, TFT_eSPI, tft, display, ESP8266, NodeMCU, ESP32, M5Stack, ILI9341",
+  "description": "OpenWeather API client for ESP8266 and ESP32",
+  "repository":
+  {
+    "type": "git",
+    "url": "https://github.com/Bodmer/OpenWeather"
+  },
+  "authors":
+  [
+    {
+        "name": "Bodmer",
+        "email": "bodmer@anola.net",
+        "maintainer": true
+    }
+  ],
+  "frameworks": "arduino",
+  "platforms": "raspberrypi, espressif8266, espressif32"
+}

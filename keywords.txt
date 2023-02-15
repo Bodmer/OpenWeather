@@ -1,0 +1,10 @@
+OpenWeather	KEYWORD1
+
+getForecast	KEYWORD2
+parseRequest	KEYWORD2
+partialDataSet	KEYWORD2
+
+OW_current	KEYWORD2
+OW_hourly	KEYWORD2
+OW_daily	KEYWORD2
+OW_forecast	KEYWORD2
