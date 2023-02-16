@@ -1,7 +1,7 @@
 //  Example from OpenWeather library: https://github.com/Bodmer/OpenWeather
 //  Adapted by Bodmer to use the TFT_eSPI library:  https://github.com/Bodmer/TFT_eSPI
 
-//  This sketch is compatible with the RP2040 Nano Connect, ESP32 and ESP32 S2, it may
+//  This sketch is compatible with the RP2040 Nano Connect, ESP32 and ESP32 S2/3, it may
 //  also work on ESP8266 but this has not been tested.
 
 //                           >>>  IMPORTANT  <<<
@@ -10,7 +10,7 @@
 //                >>>  EVEN MORE IMPORTANT TO PREVENT CRASHES <<<
 //>>>>>>  For ESP8266 set LittleFS to at least 2Mbytes before uploading files  <<<<<<
 
-//  ESP8266/ESP32 pin connections to the TFT are defined in the TFT_eSPI library.
+//  ESP8266/ESP32/RP2040 pin connections to the TFT are defined in the TFT_eSPI library.
 
 //  Original by Daniel Eichhorn, see license at end of file.
 
@@ -82,7 +82,7 @@ OW_forecast  *forecast;
 
 boolean booted = true;
 
-GfxUi ui = GfxUi(&tft); // Jpeg and bmpDraw functions TODO: pull outside of a class
+GfxUi ui = GfxUi(&tft); // Jpeg and bmpDraw functions
 
 long lastDownloadUpdate = millis();
 
@@ -105,6 +105,7 @@ void printWeather(void);
 int leftOffset(String text, String sub);
 int rightOffset(String text, String sub);
 int splitIndex(String text);
+int getNextDayIndex(void);
 
 bool tft_output(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t* bitmap)
 {
@@ -370,11 +371,7 @@ void drawCurrentWeather() {
 
   weatherIcon = getMeteoconIcon(forecast->id[0], true);
 
-  //uint32_t dt = millis();
   ui.drawBmp("/icon/" + weatherIcon + ".bmp", 0, 53);
-
-
-  //Serial.print("Icon draw time = "); Serial.println(millis()-dt);
 
   // Weather Text
   if (language == "en")

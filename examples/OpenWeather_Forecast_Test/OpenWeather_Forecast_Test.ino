@@ -1,20 +1,21 @@
-// Sketch for ESP32 to fetch the Weather Forecast from OpenWeather
+// Sketch for ESP32, ESP8266, RP2040 Pico W, RP2040 Nano Connect
+// it will run on a "bare" board ans reports via Serial messages.
+
+// It fetches the Weather Forecast from OpenWeather and is
 // an example from the library here:
 // https://github.com/Bodmer/OpenWeather
 
 // Sign up for a key and read API configuration info here:
 // https://openweathermap.org/
 
-// You can change the number of hours and days for the forecast in the
-// "User_Setup.h" file inside the OpenWeather library folder.
-// By default this is 6 hours (can be up to 48) and 5 days
-// (can be up to 8 days = today plus 7 days)
+// You can change the "User_Setup.h" file inside the OpenWeather
+// to shows the data stream from the server
 
 // Choose library to load
 #ifdef ESP8266
 #include <ESP8266WiFi.h>
 #include <WiFiClientSecure.h>
-#else // ESP32
+#else // ESP32, Pico W, RP2040 Nano Connect
 #include <WiFi.h>
 #endif
 
@@ -69,7 +70,7 @@ void setup() {
 
 void loop() {
 
-  printCurrentForecast();
+  printForecast();
   // We can make 1000 requests a day
   delay(5 * 60 * 1000); // Every 5 minutes = 288 requests per day
 }
@@ -77,12 +78,10 @@ void loop() {
 /***************************************************************************************
 **                          Send weather info to serial port
 ***************************************************************************************/
-void printCurrentForecast()
+void printForecast()
 {
   // Create the structures that hold the retrieved weather
   OW_forecast  *forecast = new OW_forecast;
-
-  //time_t time;
 
   Serial.print("\nRequesting weather information from OpenWeather... ");
 
@@ -91,11 +90,10 @@ void printCurrentForecast()
   Serial.println("Weather from OpenWeather\n");
 
   Serial.print("city_name           : "); Serial.println(forecast->city_name);
-  Serial.print("sunrise             : "); Serial.print(strTime(forecast->sunrise));
+  Serial.print("sunrise             : "); Serial.println(strTime(forecast->sunrise));
   Serial.print("sunset              : "); Serial.println(strTime(forecast->sunset));
   Serial.print("Latitude            : "); Serial.println(ow.lat);
   Serial.print("Longitude           : "); Serial.println(ow.lon);
-  // We can use the timezone to set the offset eventually...
   Serial.print("Timezone            : "); Serial.println(forecast->timezone);
   Serial.println();
 

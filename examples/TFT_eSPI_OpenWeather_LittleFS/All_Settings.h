@@ -12,15 +12,11 @@
 //            >>>           DON'T FORGET THIS             <<<
 //  Upload the fonts and icons to LittleFS using the "Tools" menu option.
 
-// You can change the number of hours and days for the forecast in the
-// "User_Setup.h" file inside the OpenWeather library folder.
-// By default this is 6 hours (can be up to 48) and 5 days
-// (can be up to 8 days = today plus 7 days). This sketch requires
-// at least 5 days of forecast. Forecast hours can be set to 1 as
-// the hourly forecast data is not used in this sketch.
+// You can change the "User_Setup.h" file inside the OpenWeather
+// to shows the data stream from the server.
 
 //////////////////////////////
-// Setttings defined below
+// Settings defined below
 
 #define WIFI_SSID      "Your_SSID"
 #define WIFI_PASSWORD  "Your_password"
