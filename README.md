@@ -1,4 +1,4 @@
-# RP2040 Nano Connect, ESP8266 and ESP32 OpenWeather client
+# Raspberry Pico W, RP2040 Nano Connect, ESP8266 and ESP32 OpenWeather client
 
 Arduino client library for https://openweathermap.org/
 
