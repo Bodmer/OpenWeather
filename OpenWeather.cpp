@@ -515,7 +515,7 @@ void OW_Weather::fullDataSet(const char *val) {
   if (currentParent == "") {
     if (currentKey == "lat") lat = value.toFloat();
     if (currentKey == "lon") lon = value.toFloat();
-    if (currentKey == "timezone") timezone = value;
+    if (currentKey == "timezone_offset") timezone = value;
   }
 
   // Current forecast - no array index - short path
